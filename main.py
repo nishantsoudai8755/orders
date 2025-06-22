@@ -1,10 +1,12 @@
 from flask import Flask, request
-import datetime
 import json
+import requests
 import os
-import csv
 
 app = Flask(__name__)
+
+# Paste your Google Apps Script Web App URL here
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxwUC_pBu_9blQKE1Y9TFNHpcEBPmJxWcgtGwdjL1VxPt9XtF5J9qdMyTkwbwhMBU5t/exec"
 
 @app.route('/')
 def home():
@@ -13,40 +15,44 @@ def home():
 @app.route('/order', methods=['POST'])
 def order_created():
     data = request.json
-    print("📦 New Order:", json.dumps(data, indent=2))
+    print("📦 Order webhook received")
 
-    # Extract relevant data
-    shipping = data.get("shipping_address", {})
-    name = shipping.get("name", "")
-    phone = shipping.get("phone", "")
-    address = shipping.get("address1", "")
-    city = shipping.get("city", "")
-    state = shipping.get("province", "")
-    country = shipping.get("country", "")
-    zip_code = shipping.get("zip", "")
-    amount = data.get("total_price", "")
+    filtered = {
+        "name": data.get("shipping_address", {}).get("name"),
+        "phone": data.get("shipping_address", {}).get("phone"),
+        "address": data.get("shipping_address", {}).get("address1"),
+        "city": data.get("shipping_address", {}).get("city"),
+        "price": data.get("total_price")
+    }
 
-    # File path for orders.csv
-    file_path = "orders.csv"
-
-    # Write to CSV
-    file_exists = os.path.isfile(file_path)
-    with open(file_path, mode="a", newline='', encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["Name", "Phone", "Address", "City", "State", "Country", "Zip", "Amount", "Date"])
-        writer.writerow([name, phone, address, city, state, country, zip_code, amount, datetime.datetime.now().isoformat()])
-
-    return "✅ Order saved to CSV", 200
+    send_to_sheets("order", filtered)
+    return "✅ Order processed", 200
 
 @app.route('/fulfillment', methods=['POST'])
 def fulfillment_created():
     data = request.json
-    print("🚚 Fulfillment:", json.dumps(data, indent=2))
-    with open("fulfillments.json", "a") as f:
-        json.dump(data, f)
-        f.write("\n")
-    return "✅ Fulfillment received", 200
+    print("🚚 Fulfillment webhook received")
+
+    filtered = {
+        "name": data.get("destination", {}).get("name"),
+        "phone": data.get("destination", {}).get("phone"),
+        "tracking_url": data.get("tracking_url"),
+        "product_names": [item.get("name") for item in data.get("line_items", [])]
+    }
+
+    send_to_sheets("fulfillment", filtered)
+    return "✅ Fulfillment processed", 200
+
+def send_to_sheets(event_type, filtered_data):
+    payload = {
+        "type": event_type,
+        "data": filtered_data
+    }
+    try:
+        res = requests.post(GOOGLE_SCRIPT_URL, json=payload)
+        print("📤 Sent to Google Sheets:", res.text)
+    except Exception as e:
+        print("❌ Failed to send to Sheets:", str(e))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
