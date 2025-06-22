@@ -1,44 +1,32 @@
 from flask import Flask, request
-import json
-import os
-from datetime import datetime
+import json, os, datetime
 
 app = Flask(__name__)
 
+def save_to_file(folder, prefix, data):
+    os.makedirs(folder, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"{folder}/{prefix}-{timestamp}.json"
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"📁 Saved: {filename}")
+
 @app.route('/')
 def home():
-    return "✅ Webhook server running!"
+    return "✅ Webhook server is live!"
 
 @app.route('/order', methods=['POST'])
-def order_created():
+def order():
     data = request.json
-    print("📦 New Order:", json.dumps(data, indent=2))
-
-    # Format the filename based on timestamp
-    now = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"orders/order-{now}.json"
-
-    os.makedirs("orders", exist_ok=True)
-    with open(filename, "w") as f:
-        json.dump(data, f, indent=2)
-
-    return "✅ Order saved to GitHub repo", 200
+    save_to_file("orders", "order", data)
+    return "✅ Order received", 200
 
 @app.route('/fulfillment', methods=['POST'])
-def fulfillment_created():
+def fulfillment():
     data = request.json
-    print("🚚 Fulfillment:", json.dumps(data, indent=2))
-
-    # Format the filename based on timestamp
-    now = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"fulfillments/fulfillment-{now}.json"
-
-    os.makedirs("fulfillments", exist_ok=True)
-    with open(filename, "w") as f:
-        json.dump(data, f, indent=2)
-
-    return "✅ Fulfillment saved to GitHub repo", 200
+    save_to_file("fulfillments", "fulfillment", data)
+    return "✅ Fulfillment received", 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port)
